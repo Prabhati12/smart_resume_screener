@@ -9,6 +9,58 @@ Original file is located at
 
 !pip install streamlit google-genai pydantic pypdf pyngrok
 
+# Set the key as an environment variable for the script to use
+from google.colab import userdata
+import os
+
+# Assuming you saved your key in Colab Secrets as 'GEMINI_API_KEY'
+os.environ['GEMINI_API_KEY'] = userdata.get('GEMINI_API_KEY')
+print("API Key set in environment.")
+
+# Table Name: candidate_analysis
+
+# Columns:
+# id INTEGER PRIMARY KEY AUTOINCREMENT - Unique identifier for each analysis record.
+# resume_filename TEXT - The name of the uploaded resume file.
+# job_description TEXT - The job description used for matching.
+# timestamp TEXT - Timestamp when the analysis was performed.
+
+# Candidate Data (from CandidateData model):
+# candidate_name TEXT
+# total_years_experience REAL
+# skills TEXT - Store as a comma-separated string or JSON string. JSON is more flexible.
+# work_experience TEXT - Store as a JSON string (list of WorkExperience objects).
+# education TEXT - Store as a JSON string (list of Education objects).
+
+# Match Result (from MatchResult model):
+# match_score INTEGER
+# justification TEXT
+# key_matches TEXT - Store as a JSON string (list of strings).
+# key_gaps TEXT - Store as a JSON string (list of strings).
+
+schema_description = """
+Database Schema: SQLite
+
+Table Name: candidate_analysis
+
+Columns:
+- id INTEGER PRIMARY KEY AUTOINCREMENT
+- resume_filename TEXT
+- job_description TEXT
+- timestamp TEXT
+- candidate_name TEXT
+- total_years_experience REAL
+- skills TEXT (JSON string)
+- work_experience TEXT (JSON string)
+- education TEXT (JSON string)
+- match_score INTEGER
+- justification TEXT
+- key_matches TEXT (JSON string)
+- key_gaps TEXT (JSON string)
+"""
+
+print(schema_description)
+
 # Commented out IPython magic to ensure Python compatibility.
 # %%writefile dashboard.py
 # # dashboard.py
@@ -22,11 +74,13 @@ Original file is located at
 # from google.genai import types
 # from pydantic import BaseModel, Field
 # from typing import List, Optional
+# import sqlite3
+# import re
+# import datetime
+# import pandas as pd
 # 
-# # --- Configuration and Pydantic Schemas (Copy from api/schemas.py) ---
 # 
-# # NOTE: Set your API Key securely (e.g., in Streamlit Secrets or environment variables)
-# # In Streamlit, use st.secrets.
+# # --- Configuration and Pydantic Schemas
 # try:
 #     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 #     if not GEMINI_API_KEY:
@@ -38,10 +92,9 @@ Original file is located at
 #     st.error(f"Failed to initialize Gemini Client: {e}")
 #     st.stop()
 # 
-# MODEL = 'gemini-2.5-flash' # Ensure this model name is correct
+# MODEL = 'gemini-2.5-flash'
 # 
-# # --- Pydantic Schema Definitions ---
-# # (Place your exact schemas here: WorkExperience, Education, CandidateData, MatchResult)
+# # Pydantic Schema Definitions
 # 
 # class WorkExperience(BaseModel):
 #     job_title: str = Field(description="The role title at the company.")
@@ -67,9 +120,107 @@ Original file is located at
 #     key_matches: List[str] = Field(description="3-5 key strengths or matched requirements.")
 #     key_gaps: List[str] = Field(description="1-3 critical missing skills or experience gaps.")
 # 
-# # --- Core Logic Functions ---
+# #Database Initialization
 # 
-# import re # Add this import if you don't have it
+# DATABASE_NAME = "candidate_data.db"
+# 
+# def init_database():
+#     """Connects to SQLite DB and creates tables if they don't exist."""
+#     conn = None
+#     try:
+#         conn = sqlite3.connect(DATABASE_NAME)
+#         cursor = conn.cursor()
+# 
+#         # Create candidate_analysis table
+#         cursor.execute('''
+#             CREATE TABLE IF NOT EXISTS candidate_analysis (
+#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+#                 resume_filename TEXT,
+#                 job_description TEXT,
+#                 timestamp TEXT,
+#                 candidate_name TEXT,
+#                 total_years_experience REAL,
+#                 skills TEXT,
+#                 work_experience TEXT,
+#                 education TEXT,
+#                 match_score INTEGER,
+#                 justification TEXT,
+#                 key_matches TEXT,
+#                 key_gaps TEXT
+#             )
+#         ''')
+#         conn.commit()
+#         st.success("Database initialized and table checked.")
+#     except sqlite3.Error as e:
+#         st.error(f"Database error during initialization: {e}")
+#     finally:
+#         if conn:
+#             conn.close()
+# 
+# # Initialize the database on app startup
+# init_database()
+# 
+# 
+# # Data Saving Function
+# 
+# def save_analysis_to_db(candidate_data: dict, match_result: dict, resume_filename: str, job_description: str):
+#     """Saves the extracted candidate data and match results to the SQLite database."""
+#     conn = None
+#     try:
+#         conn = sqlite3.connect(DATABASE_NAME)
+#         cursor = conn.cursor()
+# 
+#         # Get current timestamp
+#         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# 
+#         # Prepare data for insertion
+#         candidate_name = candidate_data.get('candidate_name', 'N/A')
+#         # Handle potential None for total_years_experience
+#         total_years_experience = candidate_data.get('total_years_experience')
+#         if total_years_experience is None:
+#             total_years_experience_db = None
+#         else:
+#             total_years_experience_db = float(total_years_experience) # Ensure it's float or None
+# 
+#         skills_json = json.dumps(candidate_data.get('skills', []))
+#         work_experience_json = json.dumps(candidate_data.get('work_experience', []))
+#         education_json = json.dumps(candidate_data.get('education', []))
+# 
+#         match_score = match_result.get('match_score', -1) # Use -1 or similar for missing score
+#         justification = match_result.get('justification', '')
+#         key_matches_json = json.dumps(match_result.get('key_matches', []))
+#         key_gaps_json = json.dumps(match_result.get('key_gaps', []))
+# 
+#         # SQL INSERT statement
+#         sql = '''
+#         INSERT INTO candidate_analysis (
+#             resume_filename, job_description, timestamp,
+#             candidate_name, total_years_experience, skills, work_experience, education,
+#             match_score, justification, key_matches, key_gaps
+#         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+#         '''
+# 
+#         # Execute the INSERT statement
+#         cursor.execute(sql, (
+#             resume_filename, job_description, timestamp,
+#             candidate_name, total_years_experience_db, skills_json, work_experience_json, education_json,
+#             match_score, justification, key_matches_json, key_gaps_json
+#         ))
+# 
+#         # Commit the transaction
+#         conn.commit()
+#         st.success(f"Analysis results saved to {DATABASE_NAME}.")
+# 
+#     except sqlite3.Error as e:
+#         st.error(f"Database error during saving: {e}")
+#     except Exception as e:
+#         st.error(f"An unexpected error occurred while saving data: {e}")
+#     finally:
+#         if conn:
+#             conn.close()
+# 
+# 
+# # Core Logic Functions
 # 
 # @st.cache_data
 # def extract_text_from_pdf(pdf_file) -> str:
@@ -77,28 +228,20 @@ Original file is located at
 #     reader = PdfReader(io.BytesIO(pdf_file.read()))
 #     text = ""
 #     for page in reader.pages:
-#         # Concatenate text from all pages
 #         text += page.extract_text() or ""
-# 
-#     # --- FIX 1: Sanitize the text input ---
-#     # Remove null bytes and non-printable control characters
 #     sanitized_text = text.replace('\x00', '')
-#     # Remove other problematic control characters (like form feeds, vertical tabs)
 #     sanitized_text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', sanitized_text)
 # 
 #     return sanitized_text
 # 
 # import streamlit as st
-# from pydantic import ValidationError # IMPORTANT: Import the Pydantic ValidationError
-# 
-# # ... (Assume imports for google.genai.types as types, client, MODEL, CandidateData, MatchResult are present) ...
+# from pydantic import ValidationError
 # 
 # @st.cache_data(show_spinner="Running LLM for Extraction and Scoring...")
 # def run_llm_processing(resume_text: str, job_description: str) -> dict:
 #     """Performs structured extraction and semantic matching via Gemini."""
 # 
 #     # 1. LLM Call 1: Structured Data Extraction
-#     # Note: Keep the resume_text sanitization in your separate PDF extraction function!
 #     extraction_prompt = f"Analyze the following RESUME TEXT and extract the structured data according to the provided schema. RESUME TEXT: --- {resume_text[:20000]} ---"
 # 
 #     config_1 = types.GenerateContentConfig(
@@ -117,7 +260,6 @@ Original file is located at
 #     cleaned_json_string = candidate_data_json.strip()
 #     cleaned_json_string = cleaned_json_string.replace('\\\\', '\\')
 # 
-#     # 🚨 START OF ERROR HANDLING FOR FIRST LLM CALL 🚨
 #     try:
 #         candidate_data = CandidateData.model_validate_json(cleaned_json_string)
 # 
@@ -125,15 +267,10 @@ Original file is located at
 #         # Display a visible Streamlit error message to the user
 #         st.error("LLM Extraction Failed: The model returned invalid JSON structure.")
 # 
-#         # Display the *raw, invalid* JSON for debugging
 #         st.subheader("Raw LLM Output (Invalid JSON)")
 #         st.code(candidate_data_json, language='json')
 # 
-#         # Raise a new exception to stop the script, as we cannot proceed without valid data
 #         raise RuntimeError(f"JSON validation failed: {e}")
-#     # 🚨 END OF ERROR HANDLING FOR FIRST LLM CALL 🚨
-# 
-#     # ----------------------------------------------------------------------
 # 
 #     # 2. LLM Call 2: Semantic Matching & Scoring
 #     scoring_prompt = f"""
@@ -156,8 +293,6 @@ Original file is located at
 #         contents=scoring_prompt,
 #         config=config_2,
 #     )
-# 
-#     # 🚨 START OF ERROR HANDLING FOR SECOND LLM CALL 🚨
 #     try:
 #         match_result = MatchResult.model_validate_json(response_2.text)
 # 
@@ -166,7 +301,6 @@ Original file is located at
 #         st.subheader("Raw LLM Scoring Output (Invalid JSON)")
 #         st.code(response_2.text, language='json')
 #         raise RuntimeError(f"Scoring JSON validation failed: {e}")
-#     # 🚨 END OF ERROR HANDLING FOR SECOND LLM CALL 🚨
 # 
 #     return {
 #         "candidate_data": candidate_data.model_dump(),
@@ -174,7 +308,7 @@ Original file is located at
 #     }
 # 
 # 
-# # --- Streamlit UI Components ---
+# # Streamlit UI Components
 # 
 # st.set_page_config(page_title="Smart Resume Screener", layout="wide")
 # st.title("🧠 Smart Resume Screener: LLM-Powered Matching")
@@ -192,7 +326,7 @@ Original file is located at
 #         placeholder="e.g., We need a Senior Python Developer with 5+ years of FastAPI, AWS, and PostgreSQL experience. Master's degree preferred."
 #     )
 # 
-# # --- Processing and Display ---
+# # Processing and Display
 # 
 # if st.button("Analyze & Score Resume") and resume_file and job_description:
 # 
@@ -210,6 +344,10 @@ Original file is located at
 # 
 #         match = results['match_result']
 #         candidate_data = results['candidate_data']
+# 
+#         # Step 3: Save results to database
+#         save_analysis_to_db(candidate_data, match, resume_file.name, job_description)
+# 
 # 
 #         st.subheader(f"Results for: {candidate_data.get('candidate_name', 'Unnamed Candidate')}")
 # 
@@ -249,14 +387,44 @@ Original file is located at
 #     except Exception as e:
 #         status_message.error(f"An error occurred during processing: {e}")
 #         st.exception(e)
+# 
+# # Data Viewing Section
+# 
+# def load_all_analysis_from_db():
+#     """Loads all records from the candidate_analysis table into a pandas DataFrame."""
+#     conn = None
+#     try:
+#         conn = sqlite3.connect(DATABASE_NAME)
+#         df = pd.read_sql_query("SELECT * FROM candidate_analysis", conn)
+#         return df
+#     except sqlite3.Error as e:
+#         st.error(f"Database error during loading: {e}")
+#         return pd.DataFrame()
+#     except Exception as e:
+#         st.error(f"An unexpected error occurred while loading data: {e}")
+#         return pd.DataFrame()
+#     finally:
+#         if conn:
+#             conn.close()
+# 
+# st.markdown("---")
+# 
+# with st.expander("View Saved Analysis Results"):
+#     st.write("Click the button below to load all saved analysis results from the database.")
+#     if st.button("Load Saved Data"):
+#         saved_data_df = load_all_analysis_from_db()
+#         if not saved_data_df.empty:
+#             st.subheader("Saved Analysis Records")
+#             st.dataframe(saved_data_df)
+#         else:
+#             st.info("No saved analysis results found in the database.")
 
-# Set the key as an environment variable for the script to use
 from google.colab import userdata
 import os
 
-# Assuming you saved your key in Colab Secrets as 'GEMINI_API_KEY'
-os.environ['GEMINI_API_KEY'] = userdata.get('GEMINI_API_KEY')
-print("API Key set in environment.")
+# Load the ngrok authtoken from Colab Secrets into environment variables
+os.environ['NGROK_AUTHTOKEN'] = userdata.get('NGROK_AUTHTOKEN')
+print("ngrok authtoken set in environment.")
 
 from pyngrok import ngrok
 import subprocess

@@ -14,7 +14,7 @@ print(f"Using model: {MODEL}")
 # ... rest of the client initialization
 
 # Install the necessary libraries
-pip install google-genai pydantic pypdf
+!pip install google-genai pydantic pypdf
 print("Dependencies installed.")
 
 import os
@@ -22,8 +22,6 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from typing import List, Optional
-
-# Input your API key when prompted
 from google.colab import userdata
 
 try:
@@ -129,7 +127,7 @@ def process_resume_and_match(resume_text: str, job_description: str) -> dict:
     # Validate and parse the structured output
     candidate_data_json = response_1.text
     candidate_data = CandidateData.model_validate_json(candidate_data_json)
-    print("✅ Extraction Complete.")
+    print("Extraction Complete.")
 
     # --- LLM Call 2: Semantic Matching & Scoring ---
     print("\n--- 2. Performing Semantic Matching and Scoring ---")
@@ -155,7 +153,7 @@ def process_resume_and_match(resume_text: str, job_description: str) -> dict:
     )
 
     match_result = MatchResult.model_validate_json(response_2.text)
-    print("✅ Scoring Complete.")
+    print("Scoring Complete.")
 
     return {
         "candidate_data": candidate_data.model_dump(),
@@ -178,7 +176,7 @@ match = results['match_result']
 
 display(Markdown(f"""
 ---
-## 🎯 MATCH SCORECARD (LLM Output)
+##MATCH SCORECARD (LLM Output)
 
 | Metric | Detail |
 | :--- | :--- |
