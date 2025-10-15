@@ -3,7 +3,7 @@
 ```markdown
 # AI-Powered Resume Screening Dashboard
 
-This project is an automated resume screening system built with Streamlit and GoogleAI Studio(API key extraction). It extracts structured candidate data from PDF resumes, compares it against a job description, assigns a fit score, and stores all results in an SQLite database for future reference.
+This project is an automated resume screening system built over Google Colab notebook with Streamlit and GoogleAI Studio(API key extraction). It extracts structured candidate data from PDF resumes, compares it against a job description, assigns a fit score, and stores all results in an SQLite database for future reference.
 
 ## Features
 
