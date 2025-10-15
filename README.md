@@ -5,6 +5,10 @@
 
 This project is an automated resume screening system built over Google Colab notebook with Streamlit and GoogleAI Studio(API key extraction). It extracts structured candidate data from PDF resumes, compares it against a job description, assigns a fit score, and stores all results in an SQLite database for future reference.
 
+## Demo video
+Find the link attached for the video demo
+https://drive.google.com/file/d/1uUZiWptkg4BSCtGDkb_Xyd80vM9l-uzU/view?usp=sharing
+
 ## Features
 
 - PDF resume parsing using PyPDF2
@@ -109,3 +113,8 @@ The application stores all results in a local SQLite database (`recruitment_resu
 3. Compare against job description
 4. Generate fit score with justification
 5. Store results in SQLite database
+
+## Ensure to replace the value
+
+1. Gemini_API_Key= "Gemini_API_Key" (The key you generated)
+2. NGROK_AUTHTOKEN= "NGROK_AUTHTOKEN" (Token generated from a verified account)
